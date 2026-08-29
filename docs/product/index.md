@@ -17,6 +17,7 @@ Vision, audience, principles, scope, and the research-backed roadmaps that direc
 * [OKF Agent Specialization](agent-specialization-roadmap.md) - The path from an agent-capable workspace to a domain-specialized OKF agent system.
 * [OKF Writing Quality](okf-writing-quality-roadmap.md) - Work packages for reader-led, claim-preserving authoring and revision.
 * [OKF Ecosystem Response](okf-ecosystem-response-roadmap.md) - Value, boundaries, dependencies, and gates for compatibility and optional governance.
+* [Document Intake Evolution](document-intake-roadmap.md) - Work packages for structural extraction, the inspectable intake plan, and multi-source contradiction handling.
 * [OKF Writing Quality Dogfood](okf-writing-quality-dogfood.md) - Retained component, provider, test, and packaging evidence for the first writing release.
 
 # Retrieval intelligence

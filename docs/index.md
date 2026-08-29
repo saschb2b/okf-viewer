@@ -34,6 +34,7 @@ This bundle is the product source of truth and the app's built-in sample. Start 
 * [OKF Retrieval Intelligence](product/retrieval-intelligence/retrieval-intelligence-roadmap.md) - The next research branch for routed retrieval, coherent context, diagnostics, and reviewed corpus repair.
 * [Integrated Git Support](product/git-integration/git-integration-roadmap.md) - Sequenced work for repository status, staging, commits, history, and explicit remote operations.
 * [OKF Ecosystem Response](product/okf-ecosystem-response-roadmap.md) - Value-led work packages for compatibility, profiles, living knowledge, provenance, projections, and interoperability experiments.
+* [Document Intake Evolution](product/document-intake-roadmap.md) - Sequenced work packages for structural extraction, the inspectable intake plan, and multi-source contradiction handling.
 * [Zed Git Research](product/git-integration/zed-git-research.md) - The source-level architecture and UX findings used for Studio's Git direction.
 * [Site Experience Research](product/site-evolution/site-experience-research.md) - Evidence behind replacing the one-page feature catalogue with a scalable product site.
 * [Site Experience Contract](product/site-evolution/site-experience-contract.md) - Target site map, navigation, homepage story, content ownership, and implementation sequence.
@@ -47,6 +48,7 @@ This bundle is the product source of truth and the app's built-in sample. Start 
 
 * [Agent Panel](features/agent-panel.md) - Run parallel agent threads, attach OKF context, approve tools, and review proposed knowledge changes.
 * [Source Adapters and Provenance](features/source-adapters.md) - Turn selected files, folders, images, and public URLs into bounded untrusted evidence with visible versioned provenance.
+* [Document Intake](features/document-intake.md) - Turn selected documents into a staged, source-anchored bundle proposal through an inspectable, re-runnable plan.
 * [Evidence and Provenance](features/evidence-and-provenance.md) - Keep durable source identity with a concept, connect claims to evidence, and check public sources only after an explicit action.
 * [Folder Autodetect](features/folder-autodetect.md) - Point at a folder and find every OKF bundle inside it.
 * [Ignore Rules](features/ignore-rules.md) - Keep selected paths out of Studio through one visible root rule file without mistaking it for access control.
@@ -108,6 +110,7 @@ This bundle is the product source of truth and the app's built-in sample. Start 
 * [Zed Agent System Research](reference/zed-agent-system.md) - Primary-source patterns and constraints adopted for OKF Studio.
 * [Agent Harness Research](reference/agent-harness-research.md) - What control surfaces such as T3 Code actually implement, what the multi-agent literature settles, and what ACP cannot expose.
 * [Specialized Agent Systems Research](reference/specialized-agent-systems.md) - Product patterns for turning the agent foundation into an OKF-specialized workspace.
+* [Document Intake Research](reference/document-intake-research.md) - Demand signals, extraction and review practice, and the two-PDF dogfood behind document intake.
 * [OKF Spec Summary](reference/okf-spec-summary.md) - The v0.1 rules Studio must honor.
 * [OKF Reference HTML Visualizer](reference/okf-reference-visualizer.md) - Google's single-file HTML consumer, the reference this app is the desktop counterpart to.
 * [OKF Sample Bundles](reference/okf-sample-bundles.md) - The GA4, Stack Overflow, and Bitcoin bundles used as additional fixtures.

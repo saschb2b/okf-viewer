@@ -47,6 +47,7 @@ One concept per user-facing capability. The sections follow Studio's normal work
 * [Declarative OKF Capability Packs](capability-packs.md) - Package curated skills, templates, contracts, and tool requirements as an inspectable unit.
 * [Guarded External Entry Points](external-entry-points.md) - Review bounded deep-link and CLI requests before Studio accepts them.
 * [Source Adapters and Provenance](source-adapters.md) - Normalize selected sources into bounded untrusted evidence with versioned receipts.
+* [Document Intake](document-intake.md) - Turn selected documents into a staged, source-anchored bundle proposal through an inspectable, re-runnable plan.
 * [Evidence and Provenance](evidence-and-provenance.md) - Connect claims to source identity and check public sources only after explicit action.
 
 # Operate and share

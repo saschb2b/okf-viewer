@@ -22,5 +22,6 @@ External specifications Studio must honor, the OKF ecosystem it builds on, imple
 
 * [Zed Agent System Research](zed-agent-system.md) - Primary-source patterns and constraints adopted for OKF Studio.
 * [Specialized Agent Systems Research](specialized-agent-systems.md) - GitHub Copilot app and OKF ecosystem patterns for domain-specialized agents.
+* [Document Intake Research](document-intake-research.md) - Demand signals, extraction and review practice, and the two-PDF dogfood behind document intake.
 * [Retrieval Schema Adapters](retrieval-schema-adapters.md) - Provider-neutral manifest and receipt fields with local and external vector-store mappings.
 * [Tauri 2.0](tauri-2.md) - Key facts about the framework, its plugins, and prerequisites.
