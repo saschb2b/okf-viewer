@@ -68,6 +68,8 @@ mod agent_csv;
 mod agent_json;
 #[path = "agent/sources/agent_pdf.rs"]
 mod agent_pdf;
+#[path = "agent/sources/agent_pdf_structure.rs"]
+mod agent_pdf_structure;
 #[path = "agent/sources/agent_source_adapter.rs"]
 mod agent_source_adapter;
 #[path = "agent/sources/agent_sources.rs"]

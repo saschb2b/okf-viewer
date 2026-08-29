@@ -320,54 +320,58 @@ fn read_sources(paths: &[SourcePath], limit: usize) -> Result<Vec<AgentSourceInp
             return Err("Selected source files exceed the 32 MiB combined limit.".to_string());
         }
 
-        let source = if media_type == "application/pdf" {
-            let extraction = crate::agent_pdf::extract_in_helper(path)?;
-            let evidence_digest =
-                format!("{:x}", sha2::Sha256::digest(extraction.content.as_bytes()));
-            let diagnostics = extraction
-                .warning
-                .as_deref()
-                .map(|warning| {
-                    vec![agent_source_adapter::warning(
-                        "pdf-partial-extraction",
-                        warning,
-                    )]
-                })
-                .unwrap_or_default();
-            AgentSourceInput {
-                title: title.clone(),
-                content: extraction.content,
-                origin: Some(title.clone()),
-                media_type: Some(media_type.to_string()),
-                source_digest: Some(extraction.source_digest.clone()),
-                warning: extraction.warning,
-                image_data: None,
-                adapter_receipt: Some(agent_source_adapter::binary_receipt(
-                    "pdf",
-                    source_path.discovery,
-                    title,
+        let source =
+            if media_type == "application/pdf" {
+                let extraction = crate::agent_pdf::extract_in_helper(path)?;
+                let evidence_digest =
+                    format!("{:x}", sha2::Sha256::digest(extraction.content.as_bytes()));
+                let mut diagnostics = extraction
+                    .warning
+                    .as_deref()
+                    .map(|warning| {
+                        vec![agent_source_adapter::warning(
+                            "pdf-partial-extraction",
+                            warning,
+                        )]
+                    })
+                    .unwrap_or_default();
+                diagnostics.extend(extraction.structure.promoted().map(|entry| {
+                    agent_source_adapter::warning(&entry.code, entry.message.clone())
+                }));
+                AgentSourceInput {
+                    title: title.clone(),
+                    content: extraction.content,
+                    origin: Some(title.clone()),
+                    media_type: Some(media_type.to_string()),
+                    source_digest: Some(extraction.source_digest.clone()),
+                    warning: extraction.warning,
+                    image_data: None,
+                    adapter_receipt: Some(agent_source_adapter::binary_receipt(
+                        "pdf",
+                        source_path.discovery,
+                        title,
+                        media_type,
+                        &extraction.source_digest,
+                        &evidence_digest,
+                        diagnostics,
+                    )),
+                }
+            } else {
+                let mut bytes = Vec::with_capacity(metadata.len() as usize);
+                File::open(path)
+                    .and_then(|file| file.take(file_limit + 1).read_to_end(&mut bytes))
+                    .map_err(|error| format!("Could not read {title}: {error}"))?;
+                if bytes.len() as u64 > file_limit {
+                    return Err(format!("{title} exceeds the 256 KiB source limit."));
+                }
+                source_from_bytes(
+                    title.clone(),
+                    title.clone(),
                     media_type,
-                    &extraction.source_digest,
-                    &evidence_digest,
-                    diagnostics,
-                )),
-            }
-        } else {
-            let mut bytes = Vec::with_capacity(metadata.len() as usize);
-            File::open(path)
-                .and_then(|file| file.take(file_limit + 1).read_to_end(&mut bytes))
-                .map_err(|error| format!("Could not read {title}: {error}"))?;
-            if bytes.len() as u64 > file_limit {
-                return Err(format!("{title} exceeds the 256 KiB source limit."));
-            }
-            source_from_bytes(
-                title.clone(),
-                title.clone(),
-                media_type,
-                bytes,
-                source_path.discovery,
-            )?
-        };
+                    bytes,
+                    source_path.discovery,
+                )?
+            };
         if source.content.trim().is_empty() {
             return Err(format!("{title} is empty."));
         }

@@ -3,7 +3,7 @@ type: Feature
 title: Document Intake
 description: Turn explicitly selected documents into a staged, source-anchored bundle proposal through an inspectable, re-runnable intake plan.
 tags: [feature, intake, sources, extraction, provenance, contradiction, review]
-generated: { by: claude/fable-5, at: 2026-08-29T17:50:00+02:00 }
+generated: { by: claude/fable-5, at: 2026-08-29T19:30:00+02:00 }
 sources:
   - resource: ../reference/document-intake-research.md
     title: Document Intake Research
@@ -29,7 +29,7 @@ Intake extends the [adapter contract](source-adapters.md) with a structural laye
 - **A heading tree.** Headings and their nesting, recovered from layout and numbering, give the document a section structure that concept proposals can follow.
 - **Footnote binding.** Numbered footnotes are recognized and bound to the page they close. A footnote carrying a URL becomes an evidence candidate with the footnote's own stated observation date, marked unverified until an explicit [source-liveness check](evidence-and-provenance.md) is run.
 - **Figure and table gaps.** A region whose content cannot be recovered from the text layer becomes a named gap carrying its caption, page, and kind. A gap is honest missing evidence; intake never invents text for it, and OCR remains out of scope exactly as it is for [attachments](agent-panel.md).
-- **Quality diagnostics.** Repeated-furniture volume, glyph-spacing damage, empty regions, and boilerplate share of total characters are measured and reported with stable codes on the receipt. A damaged source is usable partial evidence with visible warnings, following the tolerant-consumer stance.
+- **Quality diagnostics.** Repeated-furniture share, glyph-spacing damage, empty regions, and truncation are measured and recorded with stable codes in the structural classification. Findings severe enough to impair the evidence, heavy furniture share or repeated intra-word splits, are promoted to the adapter receipt as bounded warnings. A damaged source is usable partial evidence with visible warnings, following the tolerant-consumer stance.
 
 Every structural item keeps a locator: page and line span at minimum. The locator is what lets review anchor a proposed claim to its origin.
 

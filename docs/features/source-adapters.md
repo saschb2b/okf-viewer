@@ -38,7 +38,7 @@ When an adapted source enters a named OKF task, Studio also derives the bounded 
 
 # Built-in adapters
 
-Plain text, Markdown, and HTML keep their bounded UTF-8 content. Studio never inserts HTML into a webview HTML sink. CSV becomes deterministic positional Markdown tables. Generic JSON becomes a deterministic RFC 6901 pointer inventory. PDF extraction stays in the bounded helper process and carries partial-page warnings.
+Plain text, Markdown, and HTML keep their bounded UTF-8 content. Studio never inserts HTML into a webview HTML sink. CSV becomes deterministic positional Markdown tables. Generic JSON becomes a deterministic RFC 6901 pointer inventory. PDF extraction stays in the bounded helper process and carries partial-page warnings. It also computes the deterministic structural classification, furniture, headings, footnotes, and figure gaps, that [Document Intake](document-intake.md) builds on, and promotes severe quality findings to receipt warnings.
 
 Images retain verified binary evidence for an image-capable ACP agent. Folder discovery delegates each supported child to the same file adapter while preserving its folder-relative origin. URL discovery uses the existing HTTPS-only, redirect-safe, private-address-blocking fetch boundary.
 

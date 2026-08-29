@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 pub(crate) const MAX_PDF_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_PDF_PAGES: usize = 256;
 const MAX_EXTRACTED_CHARS: usize = 256 * 1024;
-const MAX_HELPER_OUTPUT_BYTES: u64 = 320 * 1024;
+// Sized for the worst case of the JSON-escaped content plus the bounded
+// structural classification that travels beside it.
+const MAX_HELPER_OUTPUT_BYTES: u64 = 640 * 1024;
 const MAX_HELPER_ERROR_BYTES: u64 = 4 * 1024;
 const EXTRACTION_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -19,6 +21,8 @@ pub(crate) struct PdfExtraction {
     pub page_count: usize,
     pub source_digest: String,
     pub warning: Option<String>,
+    #[serde(default)]
+    pub structure: crate::agent_pdf_structure::PdfStructure,
 }
 
 pub(crate) fn extract_in_helper(path: &Path) -> Result<PdfExtraction, String> {
@@ -146,12 +150,15 @@ fn extract_bytes_inner(bytes: &[u8], title: &str) -> Result<PdfExtraction, Strin
         ));
     }
 
+    let sanitized_pages = pages
+        .into_iter()
+        .map(|page| sanitize_text(&page).trim().to_string())
+        .collect::<Vec<_>>();
+
     let mut content = String::new();
     let mut empty_pages = 0_usize;
     let mut extracted_chars = 0_usize;
-    for (index, page) in pages.into_iter().enumerate() {
-        let page = sanitize_text(&page);
-        let page = page.trim();
+    for (index, page) in sanitized_pages.iter().enumerate() {
         if page.is_empty() {
             empty_pages += 1;
         }
@@ -186,6 +193,7 @@ fn extract_bytes_inner(bytes: &[u8], title: &str) -> Result<PdfExtraction, Strin
                 "{empty_pages} of {page_count} pages had no extractable text. OCR was not used."
             )
         }),
+        structure: crate::agent_pdf_structure::analyze(&sanitized_pages),
     })
 }
 
@@ -224,6 +232,7 @@ fn join_reader(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_pdf_structure::{PdfFurnitureKind, PdfGapKind};
     use pdf_extract::content::{Content, Operation};
     use pdf_extract::{dictionary, Document, Object, Stream};
 
@@ -449,49 +458,103 @@ mod tests {
         ])
     }
 
-    // The two baselines freeze what extraction hands an agent today, so the
-    // structural-extraction work has a measured before state. They assert
-    // the current flat contract on purpose; changing that contract means
-    // changing these expectations deliberately.
+    // The evidence text keeps the DI0 baseline byte-for-byte: furniture is
+    // classified in the structural layer, never removed from the content,
+    // so review can reinstate anything the classification got wrong.
     #[test]
-    fn intake_baseline_report_repeats_furniture_and_flattens_structure() {
+    fn intake_report_keeps_flat_content_and_classifies_its_structure() {
         let extraction =
             extract_bytes(&report_shaped_pdf(), "report.pdf").expect("extract report fixture");
 
+        // The DI0 content contract is unchanged.
         assert_eq!(extraction.page_count, REPORT_PAGES);
-        // The footer arrives once per page, indistinguishable from prose.
         assert_eq!(
             extraction.content.matches(REPORT_FOOTER).count(),
             REPORT_PAGES
         );
-        // The margin rail's digits interleave the body text on content pages.
-        assert!(extraction.content.contains('7'));
-        // The footnote's URL and observation date survive only as a plain
-        // line, bound to nothing.
         assert!(extraction.content.contains(REPORT_FOOTNOTE));
-        // The figure survives as its caption plus bare axis labels; nothing
-        // marks the chart data as lost.
         assert!(extraction.content.contains(REPORT_FIGURE_CAPTION));
         assert!(extraction.content.contains("13.9B"));
-        // The only structure is the page marker: one heading per page and
-        // no warning about any of the above.
         assert_eq!(extraction.content.matches("## Page ").count(), REPORT_PAGES);
         assert!(extraction.warning.is_none());
+
+        // The structural layer now carries what the flat text cannot.
+        let structure = &extraction.structure;
+        let footer = structure
+            .furniture
+            .iter()
+            .find(|line| line.text == REPORT_FOOTER)
+            .expect("classify the footer as furniture");
+        assert_eq!(footer.kind, PdfFurnitureKind::RunningLine);
+        assert_eq!(footer.occurrences, REPORT_PAGES);
+        let rails = structure
+            .furniture
+            .iter()
+            .filter(|line| line.kind == PdfFurnitureKind::MarginRail)
+            .count();
+        assert_eq!(rails, 7, "each margin-rail digit is classified");
+
+        let footnote = structure.footnotes.first().expect("bind the footnote");
+        assert_eq!(footnote.marker, 3);
+        assert_eq!(footnote.page, 3);
+        assert_eq!(
+            footnote.url.as_deref(),
+            Some("https://example.com/asset/profile")
+        );
+        assert_eq!(footnote.stated_date.as_deref(), Some("9/7/2021"));
+
+        let gap = structure.gaps.first().expect("name the figure gap");
+        assert_eq!(gap.kind, PdfGapKind::Figure);
+        assert_eq!(gap.caption, REPORT_FIGURE_CAPTION);
+        assert_eq!(gap.page, 3);
+
+        assert!(structure
+            .headings
+            .iter()
+            .any(|heading| heading.text == "Brief History" && heading.page == 3));
+        // Clean prose carries no damage diagnostic; the heavy furniture
+        // share is a promoted warning.
+        assert!(structure
+            .diagnostics
+            .iter()
+            .all(|entry| entry.code != "pdf-glyph-spacing"));
+        assert!(structure
+            .promoted()
+            .any(|entry| entry.code == "pdf-repeated-furniture"));
     }
 
     #[test]
-    fn intake_baseline_essay_keeps_glyph_spacing_damage_unmarked() {
+    fn intake_essay_diagnoses_glyph_spacing_damage() {
         let extraction =
             extract_bytes(&essay_excerpt_pdf(), "essay.pdf").expect("extract essay fixture");
 
+        // The DI0 content contract is unchanged: damage stays verbatim.
         assert_eq!(extraction.page_count, ESSAY_PAGES);
-        // The damaged running header repeats on every page, verbatim.
         assert_eq!(
             extraction.content.matches("B UILDING C ARDANO").count(),
             ESSAY_PAGES
         );
-        // Damaged section headings read as broken words with no diagnostic.
         assert!(extraction.content.contains("Science a nd E ngineering"));
         assert!(extraction.warning.is_none());
+
+        // The damaged running header is furniture, and the damage itself is
+        // a promoted diagnostic with a measure.
+        let structure = &extraction.structure;
+        let header = structure
+            .furniture
+            .iter()
+            .find(|line| line.kind == PdfFurnitureKind::RunningLine)
+            .expect("classify the running header");
+        assert_eq!(header.occurrences, ESSAY_PAGES);
+        let damage = structure
+            .promoted()
+            .find(|entry| entry.code == "pdf-glyph-spacing")
+            .expect("promote the damage diagnostic");
+        assert!(damage.measure >= 3);
+        // Numbered section headings still resolve despite the damage.
+        assert!(structure
+            .headings
+            .iter()
+            .any(|heading| heading.text == "2. Science a nd E ngineering"));
     }
 }
