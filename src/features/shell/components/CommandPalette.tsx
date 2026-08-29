@@ -229,6 +229,14 @@ export function CommandPalette() {
     },
     {
       kind: "action",
+      id: "act:intake-plan",
+      label: "Plan document intake",
+      hint: "",
+      needs: "bundle",
+      run: () => actions.setIntakePlanOpen(true),
+    },
+    {
+      kind: "action",
       id: "act:bundle-connections",
       label: "Manage bundle connections",
       hint: "",

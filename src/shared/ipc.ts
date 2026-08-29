@@ -2263,6 +2263,208 @@ function mockPlanAgentSlices(by: SliceBy, limits: SliceLimits): SlicePlan {
   return { by, fingerprint: `mock-${MOCK_BUNDLE.concepts.length}`, slices, exclusions };
 }
 
+// ---------------------------------------------------------------------------
+// Document intake plans (see docs/features/document-intake.md). The plan is
+// computed in Rust from explicitly picked documents, is deterministic for the
+// same selection, and is never authority: nothing runs or writes from it.
+
+export interface IntakePlanSource {
+  title: string;
+  mediaType: string;
+  pageCount: number;
+  sourceFingerprint: string;
+  refreshFingerprint: string;
+  warningCodes: string[];
+}
+
+export interface IntakePlanConcept {
+  id: string;
+  title: string;
+  sourceTitle: string;
+  /** Page and line locators; zero pages mean the whole unpaged document. */
+  startPage: number;
+  startLine: number;
+  /** Exclusive upper bound: the next split point, or one past the end. */
+  untilPage: number;
+  untilLine: number;
+  /** The user's keep/drop adjustment. Computation proposes everything. */
+  included: boolean;
+}
+
+export interface IntakePlanExclusion {
+  sourceTitle: string;
+  kind: string;
+  text: string;
+  occurrences: number;
+  reason: string;
+}
+
+export interface IntakePlanEvidence {
+  sourceTitle: string;
+  marker: number;
+  text: string;
+  url: string | null;
+  statedDate: string | null;
+  page: number;
+}
+
+export interface IntakePlanGap {
+  sourceTitle: string;
+  kind: string;
+  caption: string;
+  page: number;
+}
+
+export interface IntakePlan {
+  schemaVersion: number;
+  planId: string;
+  sources: IntakePlanSource[];
+  concepts: IntakePlanConcept[];
+  exclusions: IntakePlanExclusion[];
+  evidence: IntakePlanEvidence[];
+  gaps: IntakePlanGap[];
+  omitted: number;
+}
+
+export interface SavedIntakePlan {
+  bundleRoot: string;
+  savedAt: string;
+  plan: IntakePlan;
+}
+
+/** Pick documents and compute their intake plan. Null means the picker was
+ *  cancelled, which is not an empty plan. */
+export async function planDocumentIntake(): Promise<IntakePlan | null> {
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<IntakePlan | null>("plan_document_intake");
+  }
+  return structuredClone(MOCK_INTAKE_PLAN);
+}
+
+export async function saveIntakePlan(root: string, plan: IntakePlan): Promise<SavedIntakePlan> {
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<SavedIntakePlan>("save_intake_plan", { root, plan });
+  }
+  const saved: SavedIntakePlan = {
+    bundleRoot: root,
+    savedAt: new Date().toISOString(),
+    plan: structuredClone(plan),
+  };
+  mockSavedIntakePlans = [
+    saved,
+    ...mockSavedIntakePlans.filter(
+      (entry) => entry.bundleRoot !== root || entry.plan.planId !== plan.planId,
+    ),
+  ];
+  return saved;
+}
+
+export async function savedIntakePlans(root: string): Promise<SavedIntakePlan[]> {
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<SavedIntakePlan[]>("saved_intake_plans", { root });
+  }
+  return mockSavedIntakePlans.filter((entry) => entry.bundleRoot === root);
+}
+
+export async function removeIntakePlan(root: string, planId: string): Promise<boolean> {
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("remove_intake_plan", { root, planId });
+  }
+  const before = mockSavedIntakePlans.length;
+  mockSavedIntakePlans = mockSavedIntakePlans.filter(
+    (entry) => entry.bundleRoot !== root || entry.plan.planId !== planId,
+  );
+  return mockSavedIntakePlans.length !== before;
+}
+
+let mockSavedIntakePlans: SavedIntakePlan[] = [];
+
+/** The browser mock's plan: the measured shapes of the research-PDF dogfood,
+ *  so the preview and stories exercise realistic furniture, footnotes, and
+ *  figure gaps rather than a convenient empty object. */
+const MOCK_INTAKE_PLAN: IntakePlan = {
+  schemaVersion: 1,
+  planId: "a".repeat(64),
+  sources: [
+    {
+      title: "network-report.pdf",
+      mediaType: "application/pdf",
+      pageCount: 21,
+      sourceFingerprint: "sha256-mock-report",
+      refreshFingerprint: "sha256-refresh-mock-report",
+      warningCodes: ["pdf-repeated-furniture"],
+    },
+    {
+      title: "why-we-build.pdf",
+      mediaType: "application/pdf",
+      pageCount: 44,
+      sourceFingerprint: "sha256-mock-essay",
+      refreshFingerprint: "sha256-refresh-mock-essay",
+      warningCodes: ["pdf-glyph-spacing"],
+    },
+  ],
+  concepts: [
+    { id: "c0", title: "An Introduction to the Example Network", sourceTitle: "network-report.pdf", startPage: 1, startLine: 1, untilPage: 4, untilLine: 1, included: true },
+    { id: "c1", title: "Background", sourceTitle: "network-report.pdf", startPage: 4, startLine: 1, untilPage: 6, untilLine: 1, included: true },
+    { id: "c2", title: "Brief History", sourceTitle: "network-report.pdf", startPage: 6, startLine: 1, untilPage: 9, untilLine: 1, included: true },
+    { id: "c3", title: "Key Features", sourceTitle: "network-report.pdf", startPage: 9, startLine: 1, untilPage: 16, untilLine: 1, included: true },
+    { id: "c4", title: "Important Disclosures and Other Information", sourceTitle: "network-report.pdf", startPage: 16, startLine: 1, untilPage: 22, untilLine: 1, included: true },
+    { id: "c5", title: "1. Introduction", sourceTitle: "why-we-build.pdf", startPage: 1, startLine: 1, untilPage: 12, untilLine: 1, included: true },
+    { id: "c6", title: "2. Science and Engineering", sourceTitle: "why-we-build.pdf", startPage: 12, startLine: 1, untilPage: 22, untilLine: 1, included: true },
+    { id: "c7", title: "3. Interoperability", sourceTitle: "why-we-build.pdf", startPage: 22, startLine: 1, untilPage: 45, untilLine: 1, included: true },
+  ],
+  exclusions: [
+    {
+      sourceTitle: "network-report.pdf",
+      kind: "furniture-running-line",
+      text: "REVIEW THE IMPORTANT DISCLOSURES AT THE END OF THIS DOCUMENT.",
+      occurrences: 21,
+      reason: "Repeats 21 times across pages in a stable position.",
+    },
+    {
+      sourceTitle: "network-report.pdf",
+      kind: "furniture-margin-rail",
+      text: "7",
+      occurrences: 13,
+      reason: "Repeats 13 times across pages in a stable position.",
+    },
+    {
+      sourceTitle: "why-we-build.pdf",
+      kind: "furniture-running-line",
+      text: "IOHK | WHY WE A RE B UILDING C ARDANO | 0 6/28/2017",
+      occurrences: 44,
+      reason: "Repeats 44 times across pages in a stable position.",
+    },
+  ],
+  evidence: [
+    {
+      sourceTitle: "network-report.pdf",
+      marker: 3,
+      text: "Datasource https://example.com/asset/profile (Date: 9/7/2021)",
+      url: "https://example.com/asset/profile",
+      statedDate: "9/7/2021",
+      page: 8,
+    },
+    {
+      sourceTitle: "network-report.pdf",
+      marker: 7,
+      text: "Coinmetrics (Date: 9/11/2021)",
+      url: null,
+      statedDate: "9/11/2021",
+      page: 11,
+    },
+  ],
+  gaps: [
+    { sourceTitle: "network-report.pdf", kind: "figure", caption: "FIGURE 2: TOTAL TOKEN DISTRIBUTION", page: 7 },
+    { sourceTitle: "network-report.pdf", kind: "figure", caption: "FIGURE 4: TOKEN DISTRIBUTION SCHEDULE", page: 8 },
+  ],
+  omitted: 0,
+};
+
 export interface RunBudget {
   maxCost: number | null;
   maxContextTokens: number | null;

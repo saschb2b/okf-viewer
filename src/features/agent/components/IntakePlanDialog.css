@@ -1,0 +1,206 @@
+/* Plan document intake: a read-only preview of how picked documents would
+ * become proposed concepts.
+ *
+ * The concept rows keep the keep-mark, title, and span on one grid so the
+ * spans end at the same x whatever a section is called; the furniture,
+ * evidence, and gap sections are plain lists because their point is the
+ * text, not a comparison. */
+
+.intake-plan {
+  width: min(44rem, calc(100vw - var(--space-24)));
+  padding: var(--space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  max-height: calc(100vh - var(--space-24) * 2);
+  overflow-y: auto;
+}
+
+.intake-plan__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.intake-plan__subtitle {
+  margin: var(--space-4) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  max-width: 56ch;
+}
+
+.intake-plan__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.intake-plan__summary {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.intake-plan__note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  max-width: 56ch;
+}
+
+.intake-plan__note--error {
+  color: var(--error);
+}
+
+.intake-plan__sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.intake-plan__source {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+  font-size: var(--fs-sm);
+}
+
+.intake-plan__source-title {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-plan__source-meta {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.intake-plan__warning {
+  color: var(--warn);
+}
+
+.intake-plan__section {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-12);
+}
+
+.intake-plan__section-title {
+  margin: 0 0 var(--space-6);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.intake-plan__concepts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.intake-plan__concept {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  min-height: 24px;
+}
+
+.intake-plan__keep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.intake-plan__keep input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.intake-plan__keep input:focus-visible {
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.intake-plan__concept-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-plan__span {
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.intake-plan__details {
+  margin: 0;
+  padding-left: var(--space-16);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.intake-plan__details code {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.intake-plan__saved {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.intake-plan__saved-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-sm);
+}
+
+.intake-plan__saved-name {
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intake-plan__fingerprint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}
+
+.intake-plan__fingerprint code {
+  font-family: var(--mono);
+  font-size: inherit;
+}

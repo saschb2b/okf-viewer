@@ -74,6 +74,131 @@ pub(crate) fn pick_text_sources(
     read_text_sources(&paths, limit)
 }
 
+/// Select documents for intake planning. Same picker, same formats, but the
+/// result is planning identity and classification, never content or a path:
+/// the plan this feeds persists nothing an attachment would not reveal.
+pub(crate) fn pick_intake_sources(
+    app: &AppHandle,
+) -> Result<Vec<crate::agent_intake_plan::PlannedSource>, String> {
+    let selected = app
+        .dialog()
+        .file()
+        .add_filter(
+            "PDF, text, Markdown, HTML, CSV, JSON, and OpenAPI YAML",
+            &[
+                "pdf", "txt", "md", "markdown", "html", "htm", "csv", "json", "yaml", "yml",
+            ],
+        )
+        .blocking_pick_files()
+        .unwrap_or_default();
+    if selected.len() > MAX_SOURCE_ATTACHMENTS {
+        return Err(format!(
+            "Select at most {MAX_SOURCE_ATTACHMENTS} source files."
+        ));
+    }
+    let paths = selected
+        .into_iter()
+        .map(|path| {
+            path.into_path().map_err(|_| {
+                "A selected source path is not available on this platform.".to_string()
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    planned_sources(&paths)
+}
+
+fn planned_sources(
+    paths: &[PathBuf],
+) -> Result<Vec<crate::agent_intake_plan::PlannedSource>, String> {
+    let mut sources = Vec::with_capacity(paths.len());
+    for path in paths {
+        let title = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "A selected source has no usable filename.".to_string())?;
+        if title.chars().count() > MAX_SOURCE_TITLE_CHARS || title.chars().any(char::is_control) {
+            return Err("A selected source filename is too long or contains controls.".to_string());
+        }
+        let media_type = media_type_for_path(path)?;
+        let source = if media_type == "application/pdf" {
+            let extraction = crate::agent_pdf::extract_in_helper(path)?;
+            let evidence_digest =
+                format!("{:x}", sha2::Sha256::digest(extraction.content.as_bytes()));
+            let mut warning_codes = extraction
+                .warning
+                .as_deref()
+                .map(|_| vec!["pdf-partial-extraction".to_string()])
+                .unwrap_or_default();
+            warning_codes.extend(
+                extraction
+                    .structure
+                    .promoted()
+                    .map(|entry| entry.code.clone()),
+            );
+            let receipt = agent_source_adapter::binary_receipt(
+                "pdf",
+                SourceDiscovery::File,
+                title,
+                media_type,
+                &extraction.source_digest,
+                &evidence_digest,
+                Vec::new(),
+            );
+            crate::agent_intake_plan::PlannedSource {
+                title: title.to_string(),
+                media_type: media_type.to_string(),
+                page_count: extraction.page_count,
+                source_fingerprint: receipt.source_fingerprint,
+                refresh_fingerprint: receipt.refresh_fingerprint,
+                warning_codes,
+                structure: Some(extraction.structure),
+            }
+        } else {
+            let metadata = path
+                .metadata()
+                .map_err(|error| format!("Could not inspect {title}: {error}"))?;
+            if !metadata.is_file() {
+                return Err(format!("{title} is not a file."));
+            }
+            if metadata.len() > MAX_SOURCE_FILE_BYTES {
+                return Err(format!("{title} exceeds the 256 KiB source limit."));
+            }
+            let mut bytes = Vec::with_capacity(metadata.len() as usize);
+            File::open(path)
+                .and_then(|file| file.take(MAX_SOURCE_FILE_BYTES + 1).read_to_end(&mut bytes))
+                .map_err(|error| format!("Could not read {title}: {error}"))?;
+            if bytes.len() as u64 > MAX_SOURCE_FILE_BYTES {
+                return Err(format!("{title} exceeds the 256 KiB source limit."));
+            }
+            let adapted = agent_source_adapter::adapt_text(
+                title,
+                title,
+                media_type,
+                &bytes,
+                SourceDiscovery::File,
+                MAX_SOURCE_CONTENT_CHARS,
+            )?;
+            crate::agent_intake_plan::PlannedSource {
+                title: title.to_string(),
+                media_type: adapted.receipt.media_type,
+                page_count: 0,
+                source_fingerprint: adapted.receipt.source_fingerprint,
+                refresh_fingerprint: adapted.receipt.refresh_fingerprint,
+                warning_codes: adapted
+                    .receipt
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.clone())
+                    .collect(),
+                structure: None,
+            }
+        };
+        sources.push(source);
+    }
+    Ok(sources)
+}
+
 pub(crate) fn pick_source_folder(
     app: &AppHandle,
     requested_limit: usize,

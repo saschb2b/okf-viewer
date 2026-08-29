@@ -317,6 +317,7 @@ export interface State {
   connectionsOpen: boolean;
   /** How a bundle-sized job would divide into delegated runs. Read-only. */
   delegationPlanOpen: boolean;
+  intakePlanOpen: boolean;
   maximized: boolean;
   activeRoot: string | null;
   bundle: Bundle | null;
@@ -381,6 +382,7 @@ function makeInitialState(): State {
   bundleDetailsOpen: false,
   connectionsOpen: false,
   delegationPlanOpen: false,
+  intakePlanOpen: false,
   maximized: false,
   activeRoot: null,
   bundle: null,
@@ -440,6 +442,7 @@ type Msg =
   | { t: "bundleDetailsOpen"; v: boolean }
   | { t: "connectionsOpen"; v: boolean }
   | { t: "delegationPlanOpen"; v: boolean }
+  | { t: "intakePlanOpen"; v: boolean }
   | { t: "maximized"; v: boolean }
   | { t: "setBundle"; root: string; bundle: Bundle }
   | { t: "select"; id: string | null }
@@ -545,6 +548,8 @@ function reducer(s: State, m: Msg): State {
       return { ...s, connectionsOpen: m.v };
     case "delegationPlanOpen":
       return { ...s, delegationPlanOpen: m.v };
+    case "intakePlanOpen":
+      return { ...s, intakePlanOpen: m.v };
     case "maximized":
       return { ...s, maximized: m.v };
     case "setBundle": {
@@ -820,6 +825,7 @@ export interface Actions {
   setBundleDetailsOpen(open: boolean): void;
   setConnectionsOpen(open: boolean): void;
   setDelegationPlanOpen(open: boolean): void;
+  setIntakePlanOpen(open: boolean): void;
   /** Static new-bundle generation (see docs/features/create-bundle.md):
    *  Rust shows the parent-folder picker, writes the conformant starter, and
    *  the result opens like any picked folder. Resolves false when the user
@@ -1054,6 +1060,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     setBundleDetailsOpen(open) {
       dispatch({ t: "bundleDetailsOpen", v: open });
+    },
+    setIntakePlanOpen(open) {
+      dispatch({ t: "intakePlanOpen", v: open });
     },
     setDelegationPlanOpen(open) {
       dispatch({ t: "delegationPlanOpen", v: open });

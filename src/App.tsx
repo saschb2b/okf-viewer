@@ -21,6 +21,7 @@ import { RecipientProjectionDialog } from "@/features/bundle/components/Recipien
 import { BundleDetailsDialog } from "@/features/bundle/components/BundleDetailsDialog.tsx";
 import { ConnectionsDialog } from "@/features/bundle/components/ConnectionsDialog.tsx";
 import { DelegationPlanDialog } from "@/features/agent/components/DelegationPlanDialog.tsx";
+import { IntakePlanDialog } from "@/features/agent/components/IntakePlanDialog.tsx";
 import { ExternalEntryDialog } from "@/features/bundle/components/ExternalEntryDialog.tsx";
 import { BundleHome } from "@/features/bundle/components/BundleHome.tsx";
 import { ResizeHandles } from "@/features/shell/components/ResizeHandles.tsx";
@@ -131,6 +132,11 @@ export function App() {
             bundle={state.bundle}
             root={state.activeRoot}
             onOpenChange={(open) => actions.setDelegationPlanOpen(open)}
+          />
+          <IntakePlanDialog
+            open={state.intakePlanOpen}
+            root={state.activeRoot}
+            onOpenChange={(open) => actions.setIntakePlanOpen(open)}
           />
         </>
       )}

@@ -64,6 +64,8 @@ mod agent_studio;
 // sources — attached-source intake and extraction.
 #[path = "agent/sources/agent_csv.rs"]
 mod agent_csv;
+#[path = "agent/sources/agent_intake_plan.rs"]
+mod agent_intake_plan;
 #[path = "agent/sources/agent_json.rs"]
 mod agent_json;
 #[path = "agent/sources/agent_pdf.rs"]
@@ -1399,6 +1401,53 @@ async fn pick_agent_text_sources(
     agent_sources::pick_text_sources(&app, limit)
 }
 
+/// Pick documents and compute the deterministic intake plan over them.
+/// Read-only and side-effect free beyond the picker: the plan names what
+/// would be proposed, excluded, and cited, and nothing starts from it. A
+/// cancelled picker returns no plan rather than an empty one.
+#[tauri::command]
+async fn plan_document_intake(
+    app: AppHandle,
+) -> Result<Option<agent_intake_plan::IntakePlan>, String> {
+    let sources = agent_sources::pick_intake_sources(&app)?;
+    if sources.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(agent_intake_plan::compute(sources)))
+}
+
+#[tauri::command]
+fn save_intake_plan(
+    grants: State<'_, bundle_grant::BundleGrantState>,
+    plans: State<'_, agent_intake_plan::IntakePlanState>,
+    root: String,
+    plan: agent_intake_plan::IntakePlan,
+) -> Result<agent_intake_plan::SavedIntakePlan, String> {
+    let root = grants.authorize_bundle(Path::new(&root))?;
+    plans.save(&root.to_string_lossy(), plan)
+}
+
+#[tauri::command]
+fn saved_intake_plans(
+    grants: State<'_, bundle_grant::BundleGrantState>,
+    plans: State<'_, agent_intake_plan::IntakePlanState>,
+    root: String,
+) -> Result<Vec<agent_intake_plan::SavedIntakePlan>, String> {
+    let root = grants.authorize_bundle(Path::new(&root))?;
+    plans.list(&root.to_string_lossy())
+}
+
+#[tauri::command]
+fn remove_intake_plan(
+    grants: State<'_, bundle_grant::BundleGrantState>,
+    plans: State<'_, agent_intake_plan::IntakePlanState>,
+    root: String,
+    plan_id: String,
+) -> Result<bool, String> {
+    let root = grants.authorize_bundle(Path::new(&root))?;
+    plans.remove(&root.to_string_lossy(), &plan_id)
+}
+
 #[tauri::command]
 async fn pick_agent_source_folder(
     app: AppHandle,
@@ -1990,6 +2039,11 @@ pub fn run() {
                     std::io::Error::other(format!("could not load OKF routines: {error}"))
                 })?,
             );
+            app.manage(
+                agent_intake_plan::IntakePlanState::load(app.handle()).map_err(|error| {
+                    std::io::Error::other(format!("could not load intake plans: {error}"))
+                })?,
+            );
 
             // Deep links and CLI requests only enter the bounded preview queue.
             // Filesystem confirmation and activation are separate commands.
@@ -2122,6 +2176,10 @@ pub fn run() {
             federated_sources,
             federated_relationship_candidates,
             plan_agent_slices,
+            plan_document_intake,
+            save_intake_plan,
+            saved_intake_plans,
+            remove_intake_plan,
             assemble_agent_runs,
             evaluate_agent_budget,
             prompt_agent_run,
