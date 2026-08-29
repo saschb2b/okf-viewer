@@ -1408,12 +1408,16 @@ async fn pick_agent_text_sources(
 #[tauri::command]
 async fn plan_document_intake(
     app: AppHandle,
-) -> Result<Option<agent_intake_plan::IntakePlan>, String> {
-    let sources = agent_sources::pick_intake_sources(&app)?;
-    if sources.is_empty() {
+) -> Result<Option<agent_intake_plan::PlannedIntake>, String> {
+    let picked = agent_sources::pick_intake_sources(&app)?;
+    if picked.is_empty() {
         return Ok(None);
     }
-    Ok(Some(agent_intake_plan::compute(sources)))
+    let (inputs, planned): (Vec<_>, Vec<_>) = picked.into_iter().unzip();
+    Ok(Some(agent_intake_plan::PlannedIntake {
+        plan: agent_intake_plan::compute(planned),
+        sources: inputs,
+    }))
 }
 
 #[tauri::command]

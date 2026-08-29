@@ -281,6 +281,15 @@ fn clamp<T>(items: &mut Vec<T>, limit: usize) -> usize {
     over
 }
 
+/// A computed plan beside the attachment evidence it was computed from. The
+/// sources half lives only in the running session: saving keeps the plan.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannedIntake {
+    pub plan: IntakePlan,
+    pub sources: Vec<crate::agent_sources::AgentSourceInput>,
+}
+
 /// A saved plan: the plan plus when and for which granted bundle. The
 /// bundle root scopes listing; the plan itself carries no path.
 #[derive(Clone, Debug, Deserialize, Serialize)]

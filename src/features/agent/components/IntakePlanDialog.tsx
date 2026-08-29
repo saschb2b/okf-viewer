@@ -16,10 +16,12 @@ import {
   removeIntakePlan,
   saveIntakePlan,
   savedIntakePlans,
+  type AgentSourceInput,
   type IntakePlan,
   type IntakePlanConcept,
   type SavedIntakePlan,
 } from "@/shared/ipc.ts";
+import type { OkfTaskOrigin } from "@/features/agent/taskLauncher.ts";
 import "./IntakePlanDialog.css";
 
 type SaveState = "unsaved" | "saving" | "saved";
@@ -28,12 +30,18 @@ export function IntakePlanDialog({
   open,
   root,
   onOpenChange,
+  onStartThread,
 }: {
   open: boolean;
   root: string | null;
   onOpenChange: (open: boolean) => void;
+  /** Hands the plan and its session-held sources to the OKF task launcher. */
+  onStartThread?: (origin: OkfTaskOrigin) => void;
 }) {
   const [plan, setPlan] = useState<IntakePlan | null>(null);
+  // The attachment evidence behind the current plan. Session-only: a saved
+  // plan reopens without it, because no content or path is persisted.
+  const [sources, setSources] = useState<AgentSourceInput[] | null>(null);
   const [saved, setSaved] = useState<SavedIntakePlan[]>([]);
   const [picking, setPicking] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("unsaved");
@@ -64,7 +72,8 @@ export function IntakePlanDialog({
       .then((next) => {
         // Null means the picker was cancelled; the previous plan stands.
         if (next) {
-          setPlan(next);
+          setPlan(next.plan);
+          setSources(next.sources);
           setSaveState("unsaved");
         }
       })
@@ -116,6 +125,18 @@ export function IntakePlanDialog({
 
   const included = plan?.concepts.filter((concept) => concept.included).length ?? 0;
 
+  function startThread() {
+    if (!plan || !sources || !onStartThread || included === 0) return;
+    onStartThread({
+      kind: "intake-plan",
+      id: plan.planId,
+      title: `Intake plan of ${plan.sources.length} document${plan.sources.length === 1 ? "" : "s"}`,
+      plan,
+      sources,
+    });
+    onOpenChange(false);
+  }
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -151,7 +172,24 @@ export function IntakePlanDialog({
                   {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save plan"}
                 </button>
               )}
+              {plan && onStartThread && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!sources || included === 0}
+                  onClick={startThread}
+                >
+                  Start intake thread
+                </button>
+              )}
             </div>
+          )}
+
+          {plan && !sources && (
+            <p className="intake-plan__note">
+              A saved plan keeps identity only, not content. Choose the documents again to start a
+              thread from it.
+            </p>
           )}
 
           {error && (
@@ -174,6 +212,7 @@ export function IntakePlanDialog({
                       className="btn ghost"
                       onClick={() => {
                         setPlan(entry.plan);
+                        setSources(null);
                         setSaveState("saved");
                       }}
                     >

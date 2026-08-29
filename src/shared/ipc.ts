@@ -2332,14 +2332,37 @@ export interface SavedIntakePlan {
   plan: IntakePlan;
 }
 
+/** A computed plan beside the attachment evidence it was computed from. The
+ *  sources half lives only in the running session; saving keeps the plan. */
+export interface PlannedIntake {
+  plan: IntakePlan;
+  sources: AgentSourceInput[];
+}
+
 /** Pick documents and compute their intake plan. Null means the picker was
  *  cancelled, which is not an empty plan. */
-export async function planDocumentIntake(): Promise<IntakePlan | null> {
+export async function planDocumentIntake(): Promise<PlannedIntake | null> {
   if (isTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<IntakePlan | null>("plan_document_intake");
+    return invoke<PlannedIntake | null>("plan_document_intake");
   }
-  return structuredClone(MOCK_INTAKE_PLAN);
+  return {
+    plan: structuredClone(MOCK_INTAKE_PLAN),
+    sources: [
+      {
+        title: "network-report.pdf",
+        content: "## Page 1\n\nAn Introduction to the Example Network",
+        origin: "network-report.pdf",
+        mediaType: "application/pdf",
+      },
+      {
+        title: "why-we-build.pdf",
+        content: "## Page 1\n\nWHY WE A RE B UILDING CARDANO",
+        origin: "why-we-build.pdf",
+        mediaType: "application/pdf",
+      },
+    ],
+  };
 }
 
 export async function saveIntakePlan(root: string, plan: IntakePlan): Promise<SavedIntakePlan> {

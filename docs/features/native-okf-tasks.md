@@ -29,6 +29,7 @@ Each origin has a closed task set:
 - advisory profile findings prioritize a reviewed migration, then revision and audit
 - citations offer cited research, enrichment, and change impact
 - sources offer concept authoring, enrichment, cited research, and creation
+- intake plans offer enrichment first, then creation and authoring; the kickoff prompt is derived from the plan alone, so what the agent is told matches what the plan resolved (see [Document Intake](document-intake.md))
 
 The author and revise routes use the [OKF Writing](okf-writing.md) contract. Authoring begins from accepted evidence. Revision begins from an existing concept, and it cannot silently become enrichment.
 

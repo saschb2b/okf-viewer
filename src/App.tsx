@@ -137,6 +137,9 @@ export function App() {
             open={state.intakePlanOpen}
             root={state.activeRoot}
             onOpenChange={(open) => actions.setIntakePlanOpen(open)}
+            onStartThread={(origin) =>
+              actions.openOkfTaskLauncher(origin, { preferredTaskId: "okf-enrich" })
+            }
           />
         </>
       )}
