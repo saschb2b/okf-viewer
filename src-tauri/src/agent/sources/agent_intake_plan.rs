@@ -26,6 +26,7 @@ const MAX_PLAN_CONCEPTS: usize = 256;
 const MAX_PLAN_EXCLUSIONS: usize = 256;
 const MAX_PLAN_EVIDENCE: usize = 512;
 const MAX_PLAN_GAPS: usize = 256;
+const MAX_PLAN_OVERLAPS: usize = 128;
 const MAX_PLAN_TEXT_CHARS: usize = 512;
 const MAX_STORE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -53,6 +54,9 @@ pub struct IntakePlan {
     pub exclusions: Vec<IntakePlanExclusion>,
     pub evidence: Vec<IntakePlanEvidence>,
     pub gaps: Vec<IntakePlanGap>,
+    /// Where sources overlap or disagree, surfaced rather than merged.
+    #[serde(default)]
+    pub overlaps: Vec<IntakePlanOverlap>,
     /// Items beyond the per-kind limits, named rather than silently dropped.
     pub omitted: usize,
 }
@@ -104,6 +108,24 @@ pub struct IntakePlanEvidence {
     pub url: Option<String>,
     pub stated_date: Option<String>,
     pub page: usize,
+}
+
+/// Two or more sources touching the same thing. Detection is deterministic
+/// and text-level: shared footnote URLs and same-titled split points. The
+/// finding presents both sides with their stated dates; nothing is merged,
+/// averaged, or preferred, matching the reliability vocabulary's stance.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntakePlanOverlap {
+    /// "shared-evidence" for one URL cited by several sources,
+    /// "same-topic" for one title proposed by several sources.
+    pub kind: String,
+    /// The URL or the normalized title the sources share.
+    pub detail: String,
+    pub source_titles: Vec<String>,
+    /// Distinct stated observation dates for the shared detail. Two dates
+    /// here are a freshness disagreement for review, not an error.
+    pub stated_dates: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -225,10 +247,12 @@ pub(crate) fn compute(sources: Vec<PlannedSource>) -> IntakePlan {
         }
     }
 
+    let mut overlaps = detect_overlaps(&concepts, &evidence);
     let omitted = clamp(&mut concepts, MAX_PLAN_CONCEPTS)
         + clamp(&mut exclusions, MAX_PLAN_EXCLUSIONS)
         + clamp(&mut evidence, MAX_PLAN_EVIDENCE)
-        + clamp(&mut gaps, MAX_PLAN_GAPS);
+        + clamp(&mut gaps, MAX_PLAN_GAPS)
+        + clamp(&mut overlaps, MAX_PLAN_OVERLAPS);
 
     IntakePlan {
         schema_version: INTAKE_PLAN_SCHEMA_VERSION,
@@ -248,8 +272,191 @@ pub(crate) fn compute(sources: Vec<PlannedSource>) -> IntakePlan {
         exclusions,
         evidence,
         gaps,
+        overlaps,
         omitted,
     }
+}
+
+fn detect_overlaps(
+    concepts: &[IntakePlanConcept],
+    evidence: &[IntakePlanEvidence],
+) -> Vec<IntakePlanOverlap> {
+    let mut overlaps = Vec::new();
+
+    // One URL cited by several sources is shared evidence; its distinct
+    // stated dates make a freshness disagreement visible.
+    let mut by_url: Vec<(String, Vec<&IntakePlanEvidence>)> = Vec::new();
+    for entry in evidence {
+        let Some(url) = &entry.url else { continue };
+        match by_url.iter_mut().find(|(key, _)| key == url) {
+            Some((_, entries)) => entries.push(entry),
+            None => by_url.push((url.clone(), vec![entry])),
+        }
+    }
+    for (url, entries) in by_url {
+        let mut source_titles = entries
+            .iter()
+            .map(|entry| entry.source_title.clone())
+            .collect::<Vec<_>>();
+        source_titles.sort();
+        source_titles.dedup();
+        if source_titles.len() < 2 {
+            continue;
+        }
+        let mut stated_dates = entries
+            .iter()
+            .filter_map(|entry| entry.stated_date.clone())
+            .collect::<Vec<_>>();
+        stated_dates.sort();
+        stated_dates.dedup();
+        overlaps.push(IntakePlanOverlap {
+            kind: "shared-evidence".to_string(),
+            detail: url,
+            source_titles,
+            stated_dates,
+        });
+    }
+
+    // One title proposed from several sources is the same topic twice.
+    // Leading list numbering is stripped so "1. Introduction" and
+    // "Introduction" meet.
+    let mut by_title: Vec<(String, Vec<&IntakePlanConcept>)> = Vec::new();
+    for concept in concepts {
+        let key = topic_key(&concept.title);
+        if key.is_empty() {
+            continue;
+        }
+        match by_title.iter_mut().find(|(existing, _)| *existing == key) {
+            Some((_, entries)) => entries.push(concept),
+            None => by_title.push((key, vec![concept])),
+        }
+    }
+    for (key, entries) in by_title {
+        let mut source_titles = entries
+            .iter()
+            .map(|concept| concept.source_title.clone())
+            .collect::<Vec<_>>();
+        source_titles.sort();
+        source_titles.dedup();
+        if source_titles.len() < 2 {
+            continue;
+        }
+        overlaps.push(IntakePlanOverlap {
+            kind: "same-topic".to_string(),
+            detail: key,
+            source_titles,
+            stated_dates: Vec::new(),
+        });
+    }
+
+    overlaps
+}
+
+/// Case-folded title with leading section numbering removed.
+fn topic_key(title: &str) -> String {
+    let trimmed = title.trim();
+    let without_number = trimmed
+        .find(|value: char| !(value.is_ascii_digit() || value == '.'))
+        .map(|cut| trimmed[cut..].trim_start())
+        .unwrap_or("");
+    without_number.to_lowercase()
+}
+
+/// One source position in a rerun, named per source title.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntakeSourceChange {
+    pub title: String,
+    /// "unchanged", "changed", "new", or "missing".
+    pub state: String,
+}
+
+/// A rerun of a saved plan against freshly picked documents: the new plan
+/// with the saved keep/drop marks carried over where a concept survived,
+/// each source named by what happened to it, and the concepts fed by a
+/// changed or new source. Nothing is staged from this; it is an impact
+/// report the user acts on.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RerunIntakeReport {
+    pub saved_plan_id: String,
+    pub plan: IntakePlan,
+    pub sources: Vec<crate::agent_sources::AgentSourceInput>,
+    pub changes: Vec<IntakeSourceChange>,
+    pub affected_concepts: Vec<String>,
+    pub unchanged: bool,
+}
+
+/// Diff a fresh plan against the saved one. Pure, so a rerun is exactly as
+/// deterministic as the plans it compares.
+pub(crate) fn diff_rerun(
+    saved: &IntakePlan,
+    mut fresh: IntakePlan,
+) -> (IntakePlan, Vec<IntakeSourceChange>, Vec<String>) {
+    let mut changes = Vec::new();
+    for source in &saved.sources {
+        let state = match fresh
+            .sources
+            .iter()
+            .find(|candidate| candidate.title == source.title)
+        {
+            Some(candidate) if candidate.refresh_fingerprint == source.refresh_fingerprint => {
+                "unchanged"
+            }
+            Some(_) => "changed",
+            None => "missing",
+        };
+        changes.push(IntakeSourceChange {
+            title: source.title.clone(),
+            state: state.to_string(),
+        });
+    }
+    for source in &fresh.sources {
+        if !saved
+            .sources
+            .iter()
+            .any(|candidate| candidate.title == source.title)
+        {
+            changes.push(IntakeSourceChange {
+                title: source.title.clone(),
+                state: "new".to_string(),
+            });
+        }
+    }
+    changes.sort_by(|left, right| left.title.cmp(&right.title));
+
+    // Keep/drop marks survive where the concept does.
+    for concept in &mut fresh.concepts {
+        if let Some(previous) = saved.concepts.iter().find(|candidate| {
+            candidate.source_title == concept.source_title && candidate.title == concept.title
+        }) {
+            concept.included = previous.included;
+        }
+    }
+
+    let unstable = changes
+        .iter()
+        .filter(|change| change.state != "unchanged")
+        .map(|change| change.title.clone())
+        .collect::<Vec<_>>();
+    let mut affected = fresh
+        .concepts
+        .iter()
+        .filter(|concept| unstable.contains(&concept.source_title))
+        .map(|concept| concept.title.clone())
+        .collect::<Vec<_>>();
+    for concept in &saved.concepts {
+        if changes
+            .iter()
+            .any(|change| change.state == "missing" && change.title == concept.source_title)
+        {
+            affected.push(concept.title.clone());
+        }
+    }
+    affected.sort();
+    affected.dedup();
+
+    (fresh, changes, affected)
 }
 
 fn concept(
@@ -410,6 +617,7 @@ fn validate_plan(plan: &IntakePlan) -> Result<(), String> {
         || plan.exclusions.len() > MAX_PLAN_EXCLUSIONS
         || plan.evidence.len() > MAX_PLAN_EVIDENCE
         || plan.gaps.len() > MAX_PLAN_GAPS
+        || plan.overlaps.len() > MAX_PLAN_OVERLAPS
     {
         return Err("The intake plan exceeds its structural limits.".to_string());
     }
@@ -586,6 +794,114 @@ mod tests {
             .concepts
             .iter()
             .any(|concept| concept.title == "scan.pdf" && concept.until_page == 3));
+    }
+
+    #[test]
+    fn shared_urls_and_same_titles_across_sources_become_overlaps() {
+        let one = pdf_source(
+            "report-2021.pdf",
+            "aaa",
+            &["Background\nProse one.\n3. Datasource https://example.com/shared (Date: 9/7/2021)"],
+        );
+        let two = pdf_source(
+            "essay-2017.pdf",
+            "bbb",
+            &["1. Background\nProse two.\n5. Datasource https://example.com/shared (Date: 6/28/2017)"],
+        );
+        let plan = compute(vec![one, two]);
+
+        let shared = plan
+            .overlaps
+            .iter()
+            .find(|overlap| overlap.kind == "shared-evidence")
+            .expect("surface the shared URL");
+        assert_eq!(shared.detail, "https://example.com/shared");
+        assert_eq!(shared.source_titles.len(), 2);
+        // Two stated dates for one URL is a freshness disagreement, shown
+        // as both positions rather than a winner.
+        assert_eq!(
+            shared.stated_dates,
+            vec!["6/28/2017".to_string(), "9/7/2021".to_string()]
+        );
+
+        let topic = plan
+            .overlaps
+            .iter()
+            .find(|overlap| overlap.kind == "same-topic")
+            .expect("surface the shared topic");
+        assert_eq!(topic.detail, "background");
+
+        // A single-source plan has no overlaps to invent.
+        let alone = compute(vec![report_source("report.pdf")]);
+        assert!(alone.overlaps.is_empty());
+    }
+
+    #[test]
+    fn rerunning_an_unchanged_selection_reports_nothing_affected() {
+        let saved = compute(vec![report_source("report.pdf")]);
+        let fresh = compute(vec![report_source("report.pdf")]);
+
+        let (plan, changes, affected) = diff_rerun(&saved, fresh);
+
+        assert_eq!(plan.plan_id, saved.plan_id);
+        assert!(changes.iter().all(|change| change.state == "unchanged"));
+        assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn a_changed_source_names_exactly_its_concepts_and_keeps_survive() {
+        let mut saved = compute(vec![
+            report_source("report.pdf"),
+            text_source("notes.md", "bbb"),
+        ]);
+        // The user had dropped one concept in the saved plan.
+        let dropped = saved
+            .concepts
+            .iter()
+            .position(|concept| concept.title == "Background")
+            .expect("saved plan proposes Background");
+        saved.concepts[dropped].included = false;
+
+        // The report changed on disk; the notes did not.
+        let mut changed_report = report_source("report.pdf");
+        changed_report.refresh_fingerprint = "sha256-refresh-zzz".to_string();
+        let fresh = compute(vec![changed_report, text_source("notes.md", "bbb")]);
+
+        let (plan, changes, affected) = diff_rerun(&saved, fresh);
+
+        assert_eq!(
+            changes
+                .iter()
+                .map(|change| (change.title.as_str(), change.state.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("notes.md", "unchanged"), ("report.pdf", "changed")]
+        );
+        // The impact names the changed source's concepts and nothing else.
+        assert!(affected.contains(&"Background".to_string()));
+        assert!(!affected.contains(&"notes.md".to_string()));
+        // The keep/drop mark survived the rerun.
+        let background = plan
+            .concepts
+            .iter()
+            .find(|concept| concept.title == "Background")
+            .expect("fresh plan proposes Background");
+        assert!(!background.included);
+    }
+
+    #[test]
+    fn a_missing_source_reports_its_saved_concepts_as_affected() {
+        let saved = compute(vec![
+            report_source("report.pdf"),
+            text_source("notes.md", "bbb"),
+        ]);
+        let fresh = compute(vec![text_source("notes.md", "bbb")]);
+
+        let (_, changes, affected) = diff_rerun(&saved, fresh);
+
+        assert!(changes
+            .iter()
+            .any(|change| change.title == "report.pdf" && change.state == "missing"));
+        assert!(affected.contains(&"Background".to_string()));
     }
 
     #[test]

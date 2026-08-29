@@ -1431,6 +1431,42 @@ fn save_intake_plan(
     plans.save(&root.to_string_lossy(), plan)
 }
 
+/// Rerun a saved intake plan against freshly picked documents. The picker
+/// is the explicit action; the diff is pure. Nothing is staged from the
+/// report, and a cancelled picker returns no report rather than an empty
+/// one.
+#[tauri::command]
+async fn rerun_intake_plan(
+    app: AppHandle,
+    grants: State<'_, bundle_grant::BundleGrantState>,
+    plans: State<'_, agent_intake_plan::IntakePlanState>,
+    root: String,
+    plan_id: String,
+) -> Result<Option<agent_intake_plan::RerunIntakeReport>, String> {
+    let root = grants.authorize_bundle(Path::new(&root))?;
+    let saved = plans
+        .list(&root.to_string_lossy())?
+        .into_iter()
+        .find(|entry| entry.plan.plan_id == plan_id)
+        .ok_or_else(|| "No saved intake plan matches this bundle and id.".to_string())?;
+    let picked = agent_sources::pick_intake_sources(&app)?;
+    if picked.is_empty() {
+        return Ok(None);
+    }
+    let (inputs, planned): (Vec<_>, Vec<_>) = picked.into_iter().unzip();
+    let fresh = agent_intake_plan::compute(planned);
+    let (plan, changes, affected_concepts) = agent_intake_plan::diff_rerun(&saved.plan, fresh);
+    let unchanged = changes.iter().all(|change| change.state == "unchanged");
+    Ok(Some(agent_intake_plan::RerunIntakeReport {
+        saved_plan_id: saved.plan.plan_id,
+        plan,
+        sources: inputs,
+        changes,
+        affected_concepts,
+        unchanged,
+    }))
+}
+
 #[tauri::command]
 fn saved_intake_plans(
     grants: State<'_, bundle_grant::BundleGrantState>,
@@ -2182,6 +2218,7 @@ pub fn run() {
             plan_agent_slices,
             plan_document_intake,
             save_intake_plan,
+            rerun_intake_plan,
             saved_intake_plans,
             remove_intake_plan,
             assemble_agent_runs,

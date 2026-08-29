@@ -49,6 +49,35 @@ export const PlannedCorpus: Story = {
     await expect(body.getByText(/Repeats 21 times across pages/)).toBeInTheDocument();
     await expect(body.getByText(/FIGURE 2: TOTAL TOKEN DISTRIBUTION/)).toBeInTheDocument();
     await expect(body.getByText("Evidence candidates, unverified")).toBeInTheDocument();
+    // Overlap between sources is surfaced with both positions, and a stated
+    // date disagreement is named rather than resolved.
+    await expect(body.getByText(/stated dates disagree: 6\/28\/2017 vs 9\/7\/2021/)).toBeInTheDocument();
+  },
+};
+
+/** Rerunning a saved plan re-picks the documents, carries the keep/drop
+ *  marks over, and reports the impact; an unchanged selection says so. */
+export const RerunningASavedPlan: Story = {
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(body.getByRole("button", { name: "Choose documents…" }));
+    await waitFor(async () => {
+      await expect(body.getByRole("button", { name: "Save plan" })).toBeEnabled();
+    });
+    await userEvent.click(body.getByRole("button", { name: "Save plan" }));
+    await waitFor(async () => {
+      await expect(body.getByRole("button", { name: "Saved" })).toBeDisabled();
+    });
+
+    await userEvent.click(body.getByRole("button", { name: "Back to saved plans" }));
+    await expect(body.getByText("Saved plans")).toBeInTheDocument();
+
+    await userEvent.click(body.getByRole("button", { name: "Rerun…" }));
+    await waitFor(async () => {
+      await expect(
+        body.getByText("Rerun: nothing changed. Every source matches its saved fingerprint."),
+      ).toBeInTheDocument();
+    });
   },
 };
 

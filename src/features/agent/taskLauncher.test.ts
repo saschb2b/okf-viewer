@@ -113,6 +113,7 @@ describe("OKF task launcher", () => {
       gaps: [
         { sourceTitle: "report.pdf", kind: "figure", caption: "FIGURE 2: DISTRIBUTION", page: 2 },
       ],
+      overlaps: [],
       omitted: 0,
     };
     const sources = [
@@ -154,6 +155,7 @@ describe("OKF task launcher", () => {
         exclusions: [],
         evidence: [],
         gaps: [],
+        overlaps: [],
         omitted: 0,
       },
       sources: [],

@@ -14,11 +14,13 @@ import { X } from "lucide-react";
 import {
   planDocumentIntake,
   removeIntakePlan,
+  rerunIntakePlan,
   saveIntakePlan,
   savedIntakePlans,
   type AgentSourceInput,
   type IntakePlan,
   type IntakePlanConcept,
+  type IntakeSourceChange,
   type SavedIntakePlan,
 } from "@/shared/ipc.ts";
 import type { OkfTaskOrigin } from "@/features/agent/taskLauncher.ts";
@@ -44,6 +46,12 @@ export function IntakePlanDialog({
   const [sources, setSources] = useState<AgentSourceInput[] | null>(null);
   const [saved, setSaved] = useState<SavedIntakePlan[]>([]);
   const [picking, setPicking] = useState(false);
+  // The last rerun's impact: what changed and which concepts it feeds.
+  const [rerun, setRerun] = useState<{
+    changes: IntakeSourceChange[];
+    affected: string[];
+    unchanged: boolean;
+  } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("unsaved");
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +82,7 @@ export function IntakePlanDialog({
         if (next) {
           setPlan(next.plan);
           setSources(next.sources);
+          setRerun(null);
           setSaveState("unsaved");
         }
       })
@@ -110,6 +119,30 @@ export function IntakePlanDialog({
         setSaveState("unsaved");
         setError(cause instanceof Error ? cause.message : "The plan could not be saved.");
       });
+  }
+
+  function rerunSaved(planId: string) {
+    if (!root || picking) return;
+    setPicking(true);
+    setError(null);
+    void rerunIntakePlan(root, planId)
+      .then((report) => {
+        // Null means the picker was cancelled; the list stands.
+        if (report) {
+          setPlan(report.plan);
+          setSources(report.sources);
+          setRerun({
+            changes: report.changes,
+            affected: report.affectedConcepts,
+            unchanged: report.unchanged,
+          });
+          setSaveState(report.unchanged ? "saved" : "unsaved");
+        }
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "The plan could not be rerun.");
+      })
+      .finally(() => setPicking(false));
   }
 
   function removeSaved(planId: string) {
@@ -182,7 +215,33 @@ export function IntakePlanDialog({
                   Start intake thread
                 </button>
               )}
+              {plan && saved.length > 0 && (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setPlan(null);
+                    setSources(null);
+                    setRerun(null);
+                  }}
+                >
+                  Back to saved plans
+                </button>
+              )}
             </div>
+          )}
+
+          {rerun && (
+            <p className="intake-plan__note" role="status">
+              {rerun.unchanged
+                ? "Rerun: nothing changed. Every source matches its saved fingerprint."
+                : `Rerun: ${rerun.changes
+                    .filter((change) => change.state !== "unchanged")
+                    .map((change) => `${change.title} ${change.state}`)
+                    .join(", ")}. Affected concepts: ${
+                    rerun.affected.length > 0 ? rerun.affected.join(", ") : "none"
+                  }.`}
+            </p>
           )}
 
           {plan && !sources && (
@@ -217,6 +276,14 @@ export function IntakePlanDialog({
                       }}
                     >
                       Open
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={picking}
+                      onClick={() => rerunSaved(entry.plan.planId)}
+                    >
+                      Rerun…
                     </button>
                     <button
                       type="button"
@@ -305,6 +372,25 @@ export function IntakePlanDialog({
                       <li key={`${entry.sourceTitle}-${entry.marker}-${index}`}>
                         [{entry.marker}] {entry.text}
                         {entry.statedDate && ` (stated: ${entry.statedDate})`}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {plan.overlaps.length > 0 && (
+                <section className="intake-plan__section" aria-label="Overlap between sources">
+                  <h3 className="intake-plan__section-title">
+                    Overlap between sources, kept per source
+                  </h3>
+                  <ul className="intake-plan__details">
+                    {plan.overlaps.map((overlap, index) => (
+                      <li key={`${overlap.kind}-${index}`}>
+                        {overlap.kind === "shared-evidence"
+                          ? `${overlap.sourceTitles.join(" and ")} cite ${overlap.detail}`
+                          : `${overlap.sourceTitles.join(" and ")} both propose "${overlap.detail}"`}
+                        {overlap.statedDates.length > 1 &&
+                          ` — stated dates disagree: ${overlap.statedDates.join(" vs ")}`}
                       </li>
                     ))}
                   </ul>

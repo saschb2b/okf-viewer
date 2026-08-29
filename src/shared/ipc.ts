@@ -2315,6 +2315,17 @@ export interface IntakePlanGap {
   page: number;
 }
 
+/** Two or more sources touching the same thing: one URL cited by several
+ *  sources ("shared-evidence") or one title proposed by several sources
+ *  ("same-topic"). Both positions are shown; nothing is merged. */
+export interface IntakePlanOverlap {
+  kind: string;
+  detail: string;
+  sourceTitles: string[];
+  /** Distinct stated dates for the shared detail: a freshness disagreement. */
+  statedDates: string[];
+}
+
 export interface IntakePlan {
   schemaVersion: number;
   planId: string;
@@ -2323,6 +2334,7 @@ export interface IntakePlan {
   exclusions: IntakePlanExclusion[];
   evidence: IntakePlanEvidence[];
   gaps: IntakePlanGap[];
+  overlaps: IntakePlanOverlap[];
   omitted: number;
 }
 
@@ -2390,6 +2402,54 @@ export async function savedIntakePlans(root: string): Promise<SavedIntakePlan[]>
     return invoke<SavedIntakePlan[]>("saved_intake_plans", { root });
   }
   return mockSavedIntakePlans.filter((entry) => entry.bundleRoot === root);
+}
+
+/** One source's position in a rerun of a saved plan. */
+export interface IntakeSourceChange {
+  title: string;
+  state: string;
+}
+
+/** A rerun's impact report: the fresh plan with keep/drop marks carried
+ *  over, each source named by what happened, and the affected concepts. */
+export interface RerunIntakeReport {
+  savedPlanId: string;
+  plan: IntakePlan;
+  sources: AgentSourceInput[];
+  changes: IntakeSourceChange[];
+  affectedConcepts: string[];
+  unchanged: boolean;
+}
+
+/** Rerun a saved plan against freshly picked documents. Null means the
+ *  picker was cancelled. Nothing is staged from the report. */
+export async function rerunIntakePlan(
+  root: string,
+  planId: string,
+): Promise<RerunIntakeReport | null> {
+  if (isTauri()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<RerunIntakeReport | null>("rerun_intake_plan", { root, planId });
+  }
+  const saved = mockSavedIntakePlans.find(
+    (entry) => entry.bundleRoot === root && entry.plan.planId === planId,
+  );
+  if (!saved) throw new Error("No saved intake plan matches this bundle and id.");
+  return {
+    savedPlanId: planId,
+    plan: structuredClone(saved.plan),
+    sources: [
+      {
+        title: "network-report.pdf",
+        content: "## Page 1\n\nAn Introduction to the Example Network",
+        origin: "network-report.pdf",
+        mediaType: "application/pdf",
+      },
+    ],
+    changes: saved.plan.sources.map((source) => ({ title: source.title, state: "unchanged" })),
+    affectedConcepts: [],
+    unchanged: true,
+  };
 }
 
 export async function removeIntakePlan(root: string, planId: string): Promise<boolean> {
@@ -2484,6 +2544,20 @@ const MOCK_INTAKE_PLAN: IntakePlan = {
   gaps: [
     { sourceTitle: "network-report.pdf", kind: "figure", caption: "FIGURE 2: TOTAL TOKEN DISTRIBUTION", page: 7 },
     { sourceTitle: "network-report.pdf", kind: "figure", caption: "FIGURE 4: TOKEN DISTRIBUTION SCHEDULE", page: 8 },
+  ],
+  overlaps: [
+    {
+      kind: "shared-evidence",
+      detail: "https://example.com/asset/profile",
+      sourceTitles: ["network-report.pdf", "why-we-build.pdf"],
+      statedDates: ["6/28/2017", "9/7/2021"],
+    },
+    {
+      kind: "same-topic",
+      detail: "introduction",
+      sourceTitles: ["network-report.pdf", "why-we-build.pdf"],
+      statedDates: [],
+    },
   ],
   omitted: 0,
 };
