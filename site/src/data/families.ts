@@ -177,7 +177,7 @@ export const families: Family[] = [
           },
           {
             title: "Sources with receipts",
-            body: "Files, folders, images, and public pages show their adapter, observed time, origin, fingerprints, and warnings before send. Named tasks carry a profile-ready provenance record, while absolute local paths and embedded instructions stay out.",
+            body: "Files, folders, images, and public pages show their adapter, observed time, origin, fingerprints, and warnings before send. A damaged PDF text layer or page after page of repeated boilerplate is measured and warned about, not passed through silently. Named tasks carry a profile-ready provenance record, while absolute local paths and embedded instructions stay out.",
           },
         ],
       },
@@ -188,6 +188,10 @@ export const families: Family[] = [
           {
             title: "One launcher, any starting point",
             body: "Open authoring, audit, repair, research, enrichment, migration, or change-impact work from the object in view. Profile findings carry the selected local conventions and say which fields OKF requires, which the profile requires, and which it only recommends.",
+          },
+          {
+            title: "Plan intake from a pile of documents",
+            body: "Pick PDFs and other documents and Studio computes a plan locally, with no agent involved: proposed concepts split at headings, repeated page furniture set aside with its reason, footnote sources listed unverified, unreadable figures named as gaps, and overlap between sources shown from both sides. Keep or drop each concept, save the plan, rerun it later to see exactly which concepts a changed document feeds, and start the thread when it looks right.",
           },
           {
             title: "Plans and reports that stay usable",
