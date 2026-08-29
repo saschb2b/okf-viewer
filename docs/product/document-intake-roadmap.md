@@ -71,4 +71,12 @@ A package is complete only when the user job and failure states are documented b
 
 # Implementation record
 
-No package has shipped. Entries land here as work completes, following the house record format.
+| Package | Status | Evidence |
+| --- | --- | --- |
+| DI0 Fixture corpus and baseline | Shipped | The PDF helper's test lane builds two deterministic in-memory fixtures: a report-shaped PDF reproducing the measured shapes synthetically (per-page footer, margin number rail, figure caption with bare axis labels, footnote line with URL and observation date, disclosure tail) and a CC-BY-attributed excerpt of the IOHK essay carrying its real glyph-spacing damage. Two baseline tests freeze today's flat output: the footer repeats once per page indistinguishable from prose, the only structure is the page marker, and damage arrives without a warning. Network-free, byte-deterministic, no binary files checked in. |
+| DI1 Structural extraction | Not started | |
+| DI2 The intake plan | Not started | |
+| DI3 Guided intake proposals | Not started | |
+| DI4 Overlap and contradiction | Not started | |
+| DI5 Rerun and drift | Not started | |
+| DI6 Further formats | Not started | |

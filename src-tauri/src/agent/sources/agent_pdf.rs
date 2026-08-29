@@ -227,7 +227,18 @@ mod tests {
     use pdf_extract::content::{Content, Operation};
     use pdf_extract::{dictionary, Document, Object, Stream};
 
+    /// One positioned text run on a page: x, y, text.
+    type Run<'a> = (i64, i64, &'a str);
+
     fn pdf_with_pages(pages: &[Option<&str>]) -> Vec<u8> {
+        let runs = pages
+            .iter()
+            .map(|text| text.map_or_else(Vec::new, |text| vec![(72, 720, text)]))
+            .collect::<Vec<_>>();
+        pdf_with_page_runs(&runs)
+    }
+
+    fn pdf_with_page_runs(pages: &[Vec<Run>]) -> Vec<u8> {
         let mut document = Document::with_version("1.5");
         let pages_id = document.new_object_id();
         let font_id = document.add_object(dictionary! {
@@ -240,16 +251,19 @@ mod tests {
         });
         let page_ids = pages
             .iter()
-            .map(|text| {
-                let operations = text.map_or_else(Vec::new, |text| {
-                    vec![
-                        Operation::new("BT", vec![]),
-                        Operation::new("Tf", vec!["F1".into(), 12.into()]),
-                        Operation::new("Td", vec![72.into(), 720.into()]),
-                        Operation::new("Tj", vec![Object::string_literal(text)]),
-                        Operation::new("ET", vec![]),
-                    ]
-                });
+            .map(|runs| {
+                let operations = runs
+                    .iter()
+                    .flat_map(|(x, y, text)| {
+                        vec![
+                            Operation::new("BT", vec![]),
+                            Operation::new("Tf", vec!["F1".into(), 12.into()]),
+                            Operation::new("Td", vec![(*x).into(), (*y).into()]),
+                            Operation::new("Tj", vec![Object::string_literal(*text)]),
+                            Operation::new("ET", vec![]),
+                        ]
+                    })
+                    .collect::<Vec<_>>();
                 let content = Content { operations }.encode().expect("encode page");
                 let content_id = document.add_object(Stream::new(dictionary! {}, content));
                 document.add_object(dictionary! {
@@ -307,5 +321,177 @@ mod tests {
         assert!(extract_bytes(&image_only, "scan.pdf")
             .expect_err("reject image-only PDF")
             .contains("OCR is not available"));
+    }
+
+    // Document-intake fixture corpus. The report fixture reproduces, with
+    // synthetic text, the shapes measured on a 21-page research PDF whose
+    // license forbids checking in excerpts: a legal footer and a margin
+    // number rail on every content page, section headings, a figure whose
+    // chart data survives only as disordered axis labels, a footnote line
+    // carrying a source URL and observation date, and a disclosure tail.
+    const REPORT_FOOTER: &str = "REVIEW THE IMPORTANT DISCLOSURES AT THE END OF THIS DOCUMENT.";
+    const REPORT_FOOTNOTE: &str =
+        "3. Datasource https://example.com/asset/profile (Date: 9/7/2021)";
+    const REPORT_FIGURE_CAPTION: &str = "FIGURE 2: TOTAL TOKEN DISTRIBUTION";
+    const REPORT_PAGES: usize = 5;
+
+    fn margin_rail(runs: &mut Vec<Run<'static>>) {
+        for (index, label) in ["1", "2", "3", "4", "5", "6", "7"].iter().enumerate() {
+            runs.push((20, 700 - (index as i64) * 24, label));
+        }
+    }
+
+    fn report_shaped_pdf() -> Vec<u8> {
+        let mut pages: Vec<Vec<Run>> = Vec::new();
+
+        let mut title = vec![
+            (72, 720, "An Introduction to the Example Network"),
+            (72, 680, "Background 4"),
+            (72, 660, "Key Features 9"),
+            (72, 30, REPORT_FOOTER),
+        ];
+        margin_rail(&mut title);
+        pages.push(title);
+
+        let mut background = vec![
+            (72, 720, "Background"),
+            (
+                72,
+                690,
+                "The example network coordinates decentralized computers into a shared platform.",
+            ),
+            (72, 30, REPORT_FOOTER),
+        ];
+        margin_rail(&mut background);
+        pages.push(background);
+
+        let mut history = vec![
+            (72, 720, "Brief History"),
+            (
+                72,
+                690,
+                "The project was founded in 2015 and distributed tokens over two years.",
+            ),
+            (72, 640, REPORT_FIGURE_CAPTION),
+            (100, 600, "13.9B"),
+            (140, 590, "31%"),
+            (300, 600, "5.2B"),
+            (340, 590, "17%"),
+            (72, 60, REPORT_FOOTNOTE),
+            (72, 30, REPORT_FOOTER),
+        ];
+        margin_rail(&mut history);
+        pages.push(history);
+
+        pages.push(vec![
+            (72, 720, "Important Disclosures and Other Information"),
+            (
+                72,
+                690,
+                "All content is original and may not be reproduced without express consent.",
+            ),
+            (72, 30, REPORT_FOOTER),
+        ]);
+        pages.push(vec![
+            (
+                72,
+                720,
+                "This document is for informational purposes only and is not an offer to sell.",
+            ),
+            (72, 30, REPORT_FOOTER),
+        ]);
+
+        assert_eq!(pages.len(), REPORT_PAGES);
+        pdf_with_page_runs(&pages)
+    }
+
+    // Reduced excerpt of IOHK, "Why We Are Building Cardano", Charles
+    // Hoskinson, 2017-06-28, CC-BY 4.0. The glyph spacing inside the
+    // running header reproduces the damage in the document's real text
+    // layer, so extraction-quality diagnostics have a true positive.
+    const ESSAY_HEADER: &str = "IOHK |  WHY WE A RE B UILDING C ARDANO | 0 6/28/2017";
+    const ESSAY_PAGES: usize = 3;
+
+    fn essay_excerpt_pdf() -> Vec<u8> {
+        pdf_with_page_runs(&[
+            vec![
+                (72, 760, ESSAY_HEADER),
+                (72, 700, "WHY WE A RE B UILDING CARDANO"),
+                (72, 660, "1. Introduction"),
+                (72, 630, "Motivation"),
+                (
+                    72,
+                    600,
+                    "Cardano is a project that began in 2015 as an effort to change the way",
+                ),
+                (72, 580, "cryptocurrencies are designed and developed."),
+            ],
+            vec![
+                (72, 760, ESSAY_HEADER),
+                (72, 700, "2. Science a nd E ngineering"),
+                (
+                    72,
+                    670,
+                    "The overall focus beyond a particular set of innovations is to provide a",
+                ),
+                (72, 650, "more balanced and sustainable ecosystem."),
+            ],
+            vec![
+                (72, 760, ESSAY_HEADER),
+                (72, 700, "3. Interoperability"),
+                (
+                    72,
+                    670,
+                    "Cardano did not begin with a comprehensive roadmap or even an",
+                ),
+                (72, 650, "authoritative white paper."),
+            ],
+        ])
+    }
+
+    // The two baselines freeze what extraction hands an agent today, so the
+    // structural-extraction work has a measured before state. They assert
+    // the current flat contract on purpose; changing that contract means
+    // changing these expectations deliberately.
+    #[test]
+    fn intake_baseline_report_repeats_furniture_and_flattens_structure() {
+        let extraction =
+            extract_bytes(&report_shaped_pdf(), "report.pdf").expect("extract report fixture");
+
+        assert_eq!(extraction.page_count, REPORT_PAGES);
+        // The footer arrives once per page, indistinguishable from prose.
+        assert_eq!(
+            extraction.content.matches(REPORT_FOOTER).count(),
+            REPORT_PAGES
+        );
+        // The margin rail's digits interleave the body text on content pages.
+        assert!(extraction.content.contains('7'));
+        // The footnote's URL and observation date survive only as a plain
+        // line, bound to nothing.
+        assert!(extraction.content.contains(REPORT_FOOTNOTE));
+        // The figure survives as its caption plus bare axis labels; nothing
+        // marks the chart data as lost.
+        assert!(extraction.content.contains(REPORT_FIGURE_CAPTION));
+        assert!(extraction.content.contains("13.9B"));
+        // The only structure is the page marker: one heading per page and
+        // no warning about any of the above.
+        assert_eq!(extraction.content.matches("## Page ").count(), REPORT_PAGES);
+        assert!(extraction.warning.is_none());
+    }
+
+    #[test]
+    fn intake_baseline_essay_keeps_glyph_spacing_damage_unmarked() {
+        let extraction =
+            extract_bytes(&essay_excerpt_pdf(), "essay.pdf").expect("extract essay fixture");
+
+        assert_eq!(extraction.page_count, ESSAY_PAGES);
+        // The damaged running header repeats on every page, verbatim.
+        assert_eq!(
+            extraction.content.matches("B UILDING C ARDANO").count(),
+            ESSAY_PAGES
+        );
+        // Damaged section headings read as broken words with no diagnostic.
+        assert!(extraction.content.contains("Science a nd E ngineering"));
+        assert!(extraction.warning.is_none());
     }
 }
